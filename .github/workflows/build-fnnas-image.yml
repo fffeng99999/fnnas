@@ -426,6 +426,47 @@ jobs:
           rootfs_expand: ${{ inputs.rootfs_expand }}
           builder_name: ${{ inputs.builder_name }}
 
+      - name: Replace DTB for tvi3315a
+        if: ${{ env.PACKAGED_STATUS == 'success' && inputs.fnnas_board == 'tvi3315a' && !cancelled() }}
+        env:
+          CUSTOM_DTB: ${{ github.workspace }}/rk3399-tvi3315a.dtb
+        run: |
+          set -euo pipefail
+          echo "PACKAGED_OUTPUTPATH=${PACKAGED_OUTPUTPATH}"
+          [[ -f "${CUSTOM_DTB}" ]] || { echo "Custom DTB not found at: ${CUSTOM_DTB}"; exit 1; }
+          # Iterate through generated images for tvi3315a and replace DTB inside BOOT partition
+          shopt -s nullglob
+          for img_gz in "${PACKAGED_OUTPUTPATH}"/fnnas_rockchip_tvi3315a_*.img.gz; do
+            echo "Processing image: ${img_gz}"
+            img="${img_gz%.gz}"
+            sudo gunzip -f "${img_gz}"
+            loopdev="$(sudo losetup -P -f --show "${img}")"
+            echo "Loop device: ${loopdev}"
+            sudo mkdir -p /mnt/fn_boot
+            sudo mount "${loopdev}p1" /mnt/fn_boot
+            # Ensure target directory exists
+            if [[ ! -d "/mnt/fn_boot/dtb/rockchip" ]]; then
+              echo "Expected dtb path missing, listing /mnt/fn_boot:"
+              sudo ls -lah /mnt/fn_boot || true
+              echo "Listing /mnt/fn_boot/dtb:"
+              sudo ls -lah /mnt/fn_boot/dtb || true
+              echo "tvi3315a image does not look like a Rockchip bootfs. Aborting."
+              sudo umount -f /mnt/fn_boot || true
+              sudo losetup -d "${loopdev}" || true
+              exit 1
+            fi
+            sudo install -m 0644 "${CUSTOM_DTB}" "/mnt/fn_boot/dtb/rockchip/rk3399-tvi3315a.dtb"
+            echo "Replaced DTB: /mnt/fn_boot/dtb/rockchip/rk3399-tvi3315a.dtb"
+            sudo sync
+            sudo umount -f /mnt/fn_boot
+            sudo losetup -d "${loopdev}"
+            # Recompress the image
+            (cd "$(dirname "${img}")" && sudo pigz -qf "$(basename "${img}")" || sudo gzip -qf "$(basename "${img}")")
+            echo "Repacked: ${img}.gz"
+          done
+          shopt -u nullglob
+          echo "Custom DTB injection complete."
+
       - name: Upload the packaged fnnas
         uses: ncipollo/release-action@main
         if: ${{ env.PACKAGED_STATUS == 'success' && !cancelled() }}
