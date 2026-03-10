@@ -457,6 +457,11 @@ jobs:
             fi
             sudo install -m 0644 "${CUSTOM_DTB}" "/mnt/fn_boot/dtb/rockchip/rk3399-tvi3315a.dtb"
             echo "Replaced DTB: /mnt/fn_boot/dtb/rockchip/rk3399-tvi3315a.dtb"
+            # Remove other Rockchip DTBs to keep only tvi3315a
+            echo "Removing other DTBs under /boot/dtb/rockchip ..."
+            sudo find /mnt/fn_boot/dtb/rockchip -maxdepth 1 -type f -name "*.dtb" ! -name "rk3399-tvi3315a.dtb" -delete
+            echo "Remaining DTBs:"
+            sudo ls -lah /mnt/fn_boot/dtb/rockchip || true
             sudo sync
             sudo umount -f /mnt/fn_boot
             sudo losetup -d "${loopdev}"
