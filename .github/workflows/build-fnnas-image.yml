@@ -4,6 +4,7 @@
 #=====================================================================================
 
 name: Build FnNAS Image
+run-name: Build FnNAS Image (${{ github.event_name }}) - ${{ github.ref_name }}
 
 on:
   repository_dispatch:
