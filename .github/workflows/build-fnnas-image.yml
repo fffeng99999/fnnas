@@ -25,6 +25,11 @@ on:
         type: choice
         options:
           - all
+          - amlogic
+          - rockchip
+          - allwinner
+          - rockchip50
+          - rockchip50_100
           - first50
           - range50_100
           - range100_150
@@ -42,6 +47,8 @@ on:
           - bdkj-bd-one
           - bdy-g18-pro
           - beikeyun
+          - boca-tcn100
+          - cd1000
           - chainedbox
           - cm3588-nas
           - crrc
@@ -54,19 +61,24 @@ on:
           - eaidk-610
           - emb3531
           - fine3399
+          - firefly-itx-3588j
           - firefly-jd4
           - firefly-rk3399
           - fmx1-pro
           - fmx1-pro-b
+          - gea-6319
           - gzpeite-p01
           - h28k
+          - h618-devboard
           - h66k
           - h68k
           - h69k
           - h88k
           - h88k-v3
           - h96-max-m2
+          - hk1-rbox-k8s
           - hs530r
+          - ht2
           - hugsun-x99
           - ipc-r
           - jp-tvbox
@@ -75,6 +87,7 @@ on:
           - lckfb-tspi
           - leez
           - lx-r3s
+          - lyt-t68m
           - lz-d3568
           - lz-d3588
           - lz-k3568
@@ -156,6 +169,7 @@ on:
           - s905x3-ip1001m
           - s905x3-q1
           - s905x3-q2
+          - s905x3-tox1
           - s905x3-tx3
           - s905x3-tx3-bz
           - s905x3-ugoosx3
@@ -192,6 +206,7 @@ on:
           - station-m2
           - station-p2
           - sv-33a6x
+          - sv-33a6x-vpu
           - swan1-w28
           - sw799
           - taram
@@ -205,6 +220,8 @@ on:
           - wocyber-a3
           - wxy-oect
           - wxy-oect-mod
+          - x88pro20
+          - x98h
           - xiaobao
           - yskj
           - zcube1-max
@@ -261,7 +278,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Initialization environment
+      - name: Initialize the build environment
         id: init
         env:
           DEBIAN_FRONTEND: noninteractive
@@ -287,7 +304,7 @@ jobs:
           timedatectl status || true
           echo "status=success" >> ${GITHUB_OUTPUT}
 
-      - name: Create simulated physical disk
+      - name: Create virtual disk for extended storage
         run: |
           mnt_size=$(expr $(df -h /mnt | tail -1 | awk '{print $4}' | sed 's/[[:alpha:]]//g' | sed 's/\..*//') - 1)
           root_size=$(expr $(df -h / | tail -1 | awk '{print $4}' | sed 's/[[:alpha:]]//g' | sed 's/\..*//') - 4)
@@ -312,6 +329,7 @@ jobs:
         if: (!cancelled())
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
         run: |
           # Create directory
           [[ -d "fnnas" ]] || mkdir -p fnnas
@@ -356,7 +374,7 @@ jobs:
                       echo "status=success" >> ${GITHUB_OUTPUT}
                       exit 0
                   else
-                      echo "gh download failed."
+                      echo "Error: gh download failed."
                       exit 1
                   fi
               else
@@ -385,8 +403,7 @@ jobs:
                   {data: .updated_at, url: .url, name: .name}')
 
               [[ -z "${latest_version}" || "${latest_version}" == "null" ]] && {
-                  echo "Invalid fnnas image file download address."
-                  exit 1
+              echo "Error: Failed to resolve FnNAS image download URL."
               }
 
               latest_url="$(echo ${latest_version} | jq -r '.url')"
@@ -405,16 +422,16 @@ jobs:
                "${latest_url}" \
                -o "fnnas/${fnnas_filename}"
 
-          [[ "${?}" -ne "0" ]] && echo "Download failed." && exit 1
+          [[ "${?}" -ne "0" ]] && echo "Error: Download failed." && exit 1
 
-          # Add directory links
+          # Create directory symlinks for packaging
           ln -sf /builder/fnnas ${{ github.workspace }}/fnnas
-          ln -sf /builder/fnnas /home/runner/work/_actions/ophub/fnnas/main/fnnas
+          ln -sf /builder/fnnas "/home/runner/work/_actions/${OWNER,,}/fnnas/main/fnnas"
 
           echo "build_tag=${build_tag}" >> ${GITHUB_ENV}
           echo "status=success" >> ${GITHUB_OUTPUT}
 
-      - name: Packaging fnnas
+      - name: Package FnNAS for target boards
         if: ${{ steps.down.outputs.status == 'success' && !cancelled() }}
         uses: ophub/fnnas@main
         with:
@@ -426,53 +443,7 @@ jobs:
           rootfs_expand: ${{ inputs.rootfs_expand }}
           builder_name: ${{ inputs.builder_name }}
 
-      - name: Replace DTB for tvi3315a
-        if: ${{ env.PACKAGED_STATUS == 'success' && inputs.fnnas_board == 'tvi3315a' && !cancelled() }}
-        env:
-          CUSTOM_DTB: ${{ github.workspace }}/rk3399-tvi3315a.dtb
-        run: |
-          set -euo pipefail
-          echo "PACKAGED_OUTPUTPATH=${PACKAGED_OUTPUTPATH}"
-          [[ -f "${CUSTOM_DTB}" ]] || { echo "Custom DTB not found at: ${CUSTOM_DTB}"; exit 1; }
-          # Iterate through generated images for tvi3315a and replace DTB inside BOOT partition
-          shopt -s nullglob
-          for img_gz in "${PACKAGED_OUTPUTPATH}"/fnnas_rockchip_tvi3315a_*.img.gz; do
-            echo "Processing image: ${img_gz}"
-            img="${img_gz%.gz}"
-            sudo gunzip -f "${img_gz}"
-            loopdev="$(sudo losetup -P -f --show "${img}")"
-            echo "Loop device: ${loopdev}"
-            sudo mkdir -p /mnt/fn_boot
-            sudo mount "${loopdev}p1" /mnt/fn_boot
-            # Ensure target directory exists
-            if [[ ! -d "/mnt/fn_boot/dtb/rockchip" ]]; then
-              echo "Expected dtb path missing, listing /mnt/fn_boot:"
-              sudo ls -lah /mnt/fn_boot || true
-              echo "Listing /mnt/fn_boot/dtb:"
-              sudo ls -lah /mnt/fn_boot/dtb || true
-              echo "tvi3315a image does not look like a Rockchip bootfs. Aborting."
-              sudo umount -f /mnt/fn_boot || true
-              sudo losetup -d "${loopdev}" || true
-              exit 1
-            fi
-            sudo install -m 0644 "${CUSTOM_DTB}" "/mnt/fn_boot/dtb/rockchip/rk3399-tvi3315a.dtb"
-            echo "Replaced DTB: /mnt/fn_boot/dtb/rockchip/rk3399-tvi3315a.dtb"
-            # Remove other Rockchip DTBs to keep only tvi3315a
-            echo "Removing other DTBs under /boot/dtb/rockchip ..."
-            sudo find /mnt/fn_boot/dtb/rockchip -maxdepth 1 -type f -name "*.dtb" ! -name "rk3399-tvi3315a.dtb" -delete
-            echo "Remaining DTBs:"
-            sudo ls -lah /mnt/fn_boot/dtb/rockchip || true
-            sudo sync
-            sudo umount -f /mnt/fn_boot
-            sudo losetup -d "${loopdev}"
-            # Recompress the image
-            (cd "$(dirname "${img}")" && sudo pigz -qf "$(basename "${img}")" || sudo gzip -qf "$(basename "${img}")")
-            echo "Repacked: ${img}.gz"
-          done
-          shopt -u nullglob
-          echo "Custom DTB injection complete."
-
-      - name: Upload the packaged fnnas
+      - name: Upload packaged FnNAS to Release
         uses: ncipollo/release-action@main
         if: ${{ env.PACKAGED_STATUS == 'success' && !cancelled() }}
         with:
