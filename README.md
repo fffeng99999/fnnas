@@ -3,7 +3,7 @@
 </div>
 <br />
 
-View Chinese description | [查看中文说明](README.cn.md)
+[English Instructions](README.md) | [中文说明](README.cn.md)
 
 [FnNAS](https://fnnas.com/) is a deeply customized operating system built on the latest Linux kernel (Debian distribution). It offers excellent hardware compatibility with comprehensive support for mainstream x86 and Arm64 devices, enabling users to build their own NAS and flexibly expand external storage. Now, you can easily replace the Android TV system on your TV box with FnNAS, transforming it into a powerful private data storage server.
 

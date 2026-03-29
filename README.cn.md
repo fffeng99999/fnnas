@@ -3,7 +3,7 @@
 </div>
 <br />
 
-查看英文说明 | [View English description](README.md)
+[English Instructions](README.md) | [中文说明](README.cn.md)
 
 [FnNAS](https://fnnas.com/) 是一款基于最新 Linux 内核（Debian 发行版）深度定制的操作系统。它具备出色的硬件兼容能力，全面支持主流 x86 及 Arm64 设备，支持用户自主组建 NAS 并灵活扩展外部存储。现在，您可以轻松将电视盒子的 Android TV 系统替换为 FnNAS，将其打造为一台功能强大的私有数据存储服务器。
 
