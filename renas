@@ -903,6 +903,11 @@ replace_kernel() {
     [[ "${PLATFORM}" == "rockchip" ]] && ln -sf dtb ${tag_bootfs}/dtb-${kernel_name}
     [[ "$(ls ${tag_bootfs}/dtb/${PLATFORM} -l 2>/dev/null | grep "^-" | wc -l)" -ge "2" ]] || error_msg "/boot/dtb/${PLATFORM} files is missing."
 
+    custom_dtb_file="${current_path}/${FDTFILE}"
+    if [[ -f "${custom_dtb_file}" ]]; then
+        cp -f "${custom_dtb_file}" "${tag_bootfs}/dtb/${PLATFORM}/${FDTFILE}"
+    fi
+
     # 03. For /usr/src/linux-headers-${kernel_name}
     header_path="linux-headers-${kernel_name}"
     rm -rf ${tag_rootfs}/usr/src/linux-headers-* 2>/dev/null && mkdir -p "${tag_rootfs}/usr/src/${header_path}"
